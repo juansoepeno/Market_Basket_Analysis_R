@@ -1,0 +1,269 @@
+---
+title: "Market Basket Analysis with Apriori and EDA"
+author: "Juan Antonio Putra Soepeno"
+output: html_document
+---
+
+In this analysis, i want to share about how to use Apriori and EDA for Market Basket Analaysis. Before that, the data that's about to be analyze was generate by me with microsoft excel and the data is about transaction of a bakery shop in 1 day. There are 2 data that I generate, the first one is transaction data, and the second one is customers data. The transaction data tells us about the transaction per item that the customers bought and it has 3 variables. The customer data tells us about the customer that went to the store that made some transaction and it has 9 variables. 
+
+About the bakery shop that's located at South Jakarta, and I'm about to analyze a bakery shop that sells beverages too. Here, I want to know the  customer behaviour about buying at the bakery shop using Apriori method and EDA.
+
+First step is we import the data and import some packages that we will need for this project
+
+```{r Load Data, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(tidyverse)
+library(lubridate)
+library(viridis)
+library(ggthemes)
+library(gridExtra)
+library(ggridges)
+library(arules)
+library(arulesViz)
+library(dplyr)
+library(ggplot2)
+x1 <- read.csv("C:/Users/user/Documents/SEM 5/BISNIS ANALITIK/ETS BA/dp.csv",header=TRUE,sep=";") %>% mutate(Jam_Transaksi=hms(Jam_Transaksi))
+x2 <- read.csv("C:/Users/user/Documents/SEM 5/BISNIS ANALITIK/ETS BA/dt.csv",header=TRUE,sep=";")
+```
+
+From the code above, I name the data transaction data as x1, and customer data as x2. Then, from the transaction data, there is a time variable that the item is bought. I only took the hours only, so i could easily analyze. But before that, we must see does the data have a missing value or not.
+
+```{r message=FALSE, warning=FALSE}
+print(sum(is.null(x2)))
+print(sum(is.null(x1)))
+x1[x1==0] <- NA
+x2[x2==0] <- NA
+print(sum(is.na(x2)))
+print(sum(is.na(x1)))
+missing_value <- subset(x2, is.na(x2$Banyak_Produk))
+missing_value
+```
+
+From the result above, it can't detect the missing value or 0. Then, I tried another syntax that will indicate if there's 0, it means missing value. After that, it's shown that there are 18 data from x2 that had some missing value. The solution is, we could delete the missing value in data x2. Why deleting it? Because the customer didn't make any transaction so I deleted it. However, data x1 and x2 are connected. So, deleting the transaction that had a missing value in customer data, we must delete the same transaction at transaction data. 
+
+```{r message=FALSE, warning=FALSE}
+x2 <- drop_na(x2)
+x1 <- drop(x1[])
+print(x2) #to check is there any missing valur or not
+```
+
+As we could see, there are no missing value any more and we could continue anlyze
+
+# 1. ANALYZE TRANSACTION DATA
+
+## 1.1 Transaction by Hour 
+
+From the transaction data, it is shown that there's a transaction time(Jam Transaksi). That variable could tell us at what time is the bakery busy.
+
+```{r message=FALSE, warning=FALSE}
+Grafik1 <- x1 %>%
+mutate(Hour = as.factor(hour(x1$Jam_Transaksi))) %>% 
+group_by(Hour) %>% summarise(Count=n()) %>% 
+ggplot(aes(x=Hour,y=Count,fill=Count))+
+theme_fivethirtyeight()+
+geom_bar(stat="identity")+
+ggtitle("Transaction by Hour")+
+theme(legend.position="none")
+Grafik1
+```
+
+From the graph above, we could see that the purchases start to increase from 10:00 until 13:00. Then, from 13:00 until 16:00 the purchases kept decreasing. So, i can interpret that, the most purchase was at lunch time.
+
+## 1.2 Bakery Signature Product
+
+```{r message=FALSE, warning=FALSE}
+Grafik2 <- x1 %>% 
+  group_by(Nama_Produk) %>% 
+  summarise(Count = n()) %>% 
+  arrange(desc(Count)) %>%
+  ggplot(aes(x=reorder(Nama_Produk,Count),y=Count,fill=Nama_Produk))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+  ggtitle("Bakery Signature Product")+
+  labs(y= "", x = "Product")+
+  theme(legend.position="none")
+Grafik2
+```
+
+From the graph above, the most product that is purchase is Kopi("Coffee"), then Teh("Tea"), etc.
+
+## 1.3 Unique Transaction by Hour
+
+From the customer data, there's a total of item that is bought by the customer. From that variabel("Banyak_Produk"), we can see the mean of produk that is bought per customer at some certain hour.
+
+```{r message=FALSE, warning=FALSE}
+Grafik3.1 <- x1 %>% 
+  mutate(Hour = as.factor(hour(x1$Jam_Transaksi)))%>% 
+  group_by(Hour) %>% 
+  summarise(Count= n()) 
+
+Grafik3.2 <- x1 %>% 
+  mutate(Hour = as.factor(hour(x1$Jam_Transaksi)))%>% 
+  group_by(Hour,x1$Transkasi) %>% 
+  summarise(n_distinct(x1$Transkasi)) %>% 
+  summarise(Count=n())
+
+Grafik3.3 <- data.frame(Grafik3.1, # Days, total items
+                   Grafik3.2[2], # unique transactions
+                   Grafik3.1[2]/Grafik3.2[2])  # items per unique transaction
+colnames(Grafik3.3) <- c("Hour","Line","Unique","Items.Trans")
+
+Grafik3 <- 
+  ggplot(Grafik3.3,aes(x=Hour,y=Items.Trans,fill=Items.Trans))+
+  theme_fivethirtyeight()+
+  geom_bar(stat="identity")+
+  ggtitle("Unique Transaction by Hour")+
+  theme(legend.position="none")+
+  geom_text(aes(label=round(Items.Trans,1)), vjust=2)
+Grafik3
+```
+
+From the graph above, it tells us about the mean or average total item that is bought by the customers per hour. From the barplot above, the most average total item that is bought by customer is at 08:00 and 14:00. From 08:00, it tells that most of the customer need to by more food/drinks because the customer didn't make or eat breakfast at home, so the customer bought many than usual. Then, at 14:00 is lunch time where people need to eat many so they bought more than average.
+
+# 2. ANALYZE CUSTOMER DATA
+
+From the customer data, there are many variables that we can explore more. There are a lot of variabels that we can conclude such as membership, payment etc.
+
+## 2.1 Membership
+
+From the customer data, we know that the bakery shop has some membership customer. The variable could tell us how many membership customer that went to the bakery shop and make some purchase
+
+```{r message=FALSE,warning=FALSE}
+member <- x2 %>% 
+  group_by(Type_Pelanggan) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(per=`n`/sum(`n`)) %>% 
+  arrange(desc(Type_Pelanggan))
+member$label <- scales::percent(member$per)
+ggplot(member=member)+
+  geom_bar(aes(x="", y=member$per, fill=member$Type_Pelanggan), stat="identity", width = 1)+
+  coord_polar("y", start=0)+
+  theme_void()+
+  geom_text(aes(x=1, y = cumsum(member$per) - member$per/2, label=member$label))
+```
+
+The pie chart above explain that 29% that went to the bakery shop and bought something was 29% is a membership of that bakery shop and the others were not a normal customer.
+
+## 2.2 Type of payment
+
+Not there is only the type of customer that went to the store, the customer data tells us about what type of payment does the customer use.
+
+```{r message=FALSE,warning=FALSE}
+payment <- x2 %>% 
+  group_by(Pembayaran) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(per=`n`/sum(`n`)) %>% 
+  arrange(desc(Pembayaran))
+payment$label <- scales::percent(payment$per)
+ggplot(payment=payment)+
+  geom_bar(aes(x="", y=payment$per, fill=payment$Pembayaran), stat="identity", width = 1)+
+  coord_polar("y", start=0)+
+  theme_void()+
+  geom_text(aes(x=1, y = cumsum(payment$per) - payment$per/2, label=payment$label))
+```
+
+Now we know that most of the customer pay for their purchase with E-Wallet(Gopay OVO, & etc) with 56% of all the customer at 1 day and 32% of the customer that payed with debit card and the rest is with cash.
+
+## 2.3 Customer Domicile
+
+The customer data also shown the customer domicile.Now we can see where's does the most buyers domicile
+
+```{r message=FALSE, warning=FALSE}
+Grafik6 <- x2 %>% #grafik daerah rumah
+  group_by(Daerah_Rumah) %>% 
+  summarise(Count = n()) %>% 
+  arrange(desc(Count)) %>%
+  ggplot(aes(x=Daerah_Rumah,y=Count,fill=Daerah_Rumah))+
+  geom_bar(stat="identity")+
+  ggtitle("Daerah Rumah pelanggan")+
+  theme(legend.position="none")
+Grafik6
+```
+
+From the barplot above, the most buyer at that day was customer that live in Tanggerang.
+
+## 2.4 Customer Gender
+
+From the customer data, it gives us information about the customer gender. The gender variable could give us some new information.
+
+```{r message=FALSE, warning=FALSE}
+jk <- x2 %>% 
+  group_by(Jenis_Kelamin) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(per=`n`/sum(`n`)) %>% 
+  arrange(desc(Jenis_Kelamin))
+jk$label <- scales::percent(jk$per)
+ggplot(jk=jk)+
+  geom_bar(aes(x="", y=jk$per, fill=jk$Jenis_Kelamin), stat="identity", width = 1)+
+  coord_polar("y", start=0)+
+  theme_void()+
+  geom_text(aes(x=1, y = cumsum(jk$per) - jk$per/2, label=jk$label))
+```
+
+As you could see, most of the costumer is female. From this new insight, the bakery shop owner can boost the sales with adding a promo like "TGIF(Thanks God Is Female)" where the membership customer and female will get a promotion. From this type of promo, it can boost the membership for the bakery shop and boost the sales.
+
+## 2.5 Customer Dine type
+
+There are variables about the dine type of customer. 
+
+```{r message=FALSE, warning=FALSE}
+dt <- x2 %>% 
+  group_by(Type_Dine) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(per=`n`/sum(`n`)) %>% 
+  arrange(desc(Type_Dine))
+dt$label <- scales::percent(dt$per)
+ggplot(dt=dt)+
+  geom_bar(aes(x="", y=dt$per, fill=dt$Type_Dine), stat="identity", width = 1)+
+  coord_polar("y", start=0)+
+  theme_void()+
+  geom_text(aes(x=1, y = cumsum(dt$per) - dt$per/2, label=dt$label))
+```
+
+From the pie chart above, most of the type dine customer is online(gofood and grabfood).
+
+# MARKET BASKET ANALYSIS with APRIORI
+
+First of all, maybe i'll explain what is apriori. Imagine in grocery shop, there are a housewife, college students, etc. Every people have their own business when they go to grocery shopping. Housewife buying diapers and milk for their child, a college students attend to buy chips and sweet drinks or food. From these buying patterns, it can help to increase the sales in several ways. Example if there is a pair of items, A and B, that are frequently bought together. To boost some sales, there are ways such as, put items A and B in the same shelf so the buyers could easily see the items, or the store could give a discount or promotion for buying item A and B together, etc. 
+
+In apriori method, there are three common ways to measure association:
+1.) Support, support is to find the combination of the item in the database. The greater the support for the items, the more items are purchased or it shows the dominance of an item from the whole transaction.
+2.) Confidence, confidence is the probability of a several products being purchased, while on product is definitely purchase.
+3.) Lift, lift indicates the validity of the transaction process and provides information on whether the item was purchased together with other items. If the value of lift is 1, it will shown that the combination is independent. If the value is greater that 1, it will shown that the combination have a positive correlation and if the value is less than 1, it will shown that the combination have a negative correlation.
+
+```{r message=FALSE, warning=FALSE}
+y <- read.transactions("C:/Users/user/Documents/SEM 5/BISNIS ANALITIK/ETS BA/dp.csv",format="single",cols=c(1,3),sep=";"
+)
+rules_a <- apriori(y,parameter=list(support=0.01,confidence=.6,maxlen=3))
+rules_a
+inspect(head(rules_a,by="support",n=3))
+```
+
+With the result above, it's filtered by the 3 highest support with the minimum of support is 0.01, minimum of confidence is 0.6 and the maxlen or the maximum of combination to be shown is 3. From the table above, it tells us that if the customer at that day bought Roti Abon and Roti Cokelat, the customer will bought Kopi and the reality, there are 8 customer that bought with those combintation. It also shown the value of the support is 0.04, with confidence 0.62 and lift 1.2. The support value is not that high because the transaction is not that many and it's fine, therefore we could see the value of confidence is greater than 60% with the value of lift is greater than 1. For the other combination has the same interpretation.
+
+If we see carefully see the table, most of the following combination is either Kopi or Roti Coklat. So, if the owner of the bakery shop wants to boost sales, my suggestion is to have a promotion of buy 2(choose : Roti Abon, Roti Cokelat, or Roti Keju) and the customer will get 1 free item(Kopi). It will be a good thing if the promotion is only for the membership only. Seeing that, the other customer that haven't been a membership will be interested to be a membership.
+
+Here are some graph about the apriori
+
+```{r message=FALSE, warning=FALSE}
+#plot(rules_a, method="paracoord", control=list(reorder=TRUE)) can use this
+#plot(rules_a, method="two-key plot") can use this
+plot(rules_a, method="graph")
+```
+
+# RECOMMENDATION & CONCLUSION
+
+Here are some of my recommendation for the bakery shop
+
+1. Busy hours, is around 12:00 and around 13:00. Therefore, the waiter from the bakery shop should standby around those time
+
+2.To increase consumer loyalty, a promo is held for every member who successfully invites his friends to join as members
+
+3.Cooperate with various cashless payment providers to get attractive discounts for new customers.
+
+4.Establish new promotion for member only or it depends on the owner. My recommendation is :
+  - Promtion = Buy 2(choose : Roti Abon, Roti Cokelat, or Roti Keju) get 1 Kopi
+  - TGIF(Thanks God is Female) = Discount for membership women who shops in         store 
